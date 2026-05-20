@@ -647,7 +647,17 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         filterField.widthAnchor.constraint(equalToConstant: 280).isActive = true
         grid.addRow(with: [NSTextField(labelWithString: "App filter:"), filterField])
 
-        alert.accessoryView = grid
+        let wrapper = NSView()
+        wrapper.addSubview(grid)
+        NSLayoutConstraint.activate([
+            grid.topAnchor.constraint(equalTo: wrapper.topAnchor),
+            grid.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor),
+            grid.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor),
+            grid.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
+        ])
+        wrapper.layoutSubtreeIfNeeded()
+        wrapper.setFrameSize(wrapper.fittingSize)
+        alert.accessoryView = wrapper
 
         guard let window else { return }
         alert.beginSheetModal(for: window) { response in
