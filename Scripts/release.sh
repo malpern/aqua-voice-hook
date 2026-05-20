@@ -117,6 +117,36 @@ echo "📦 Creating Sparkle archive..."
 SPARKLE_ZIP="dist/AquaVoiceHook-${VERSION}.zip"
 ditto -c -k --keepParent "$APP_DIR" "$SPARKLE_ZIP"
 
+# Create DMG
+echo "💿 Creating DMG..."
+DMG_PATH="dist/AquaVoiceHook-${VERSION}.dmg"
+rm -f "$DMG_PATH"
+if command -v create-dmg >/dev/null 2>&1; then
+    create-dmg \
+        --volname "Aqua Voice Hook" \
+        --window-pos 200 120 \
+        --window-size 600 380 \
+        --icon-size 128 \
+        --icon "${APP_NAME}.app" 150 180 \
+        --hide-extension "${APP_NAME}.app" \
+        --app-drop-link 450 180 \
+        --no-internet-enable \
+        "$DMG_PATH" \
+        "$APP_DIR" >/dev/null 2>&1
+else
+    DMG_STAGING="dist/dmg-staging"
+    rm -rf "$DMG_STAGING"
+    mkdir -p "$DMG_STAGING"
+    cp -R "$APP_DIR" "$DMG_STAGING/"
+    ln -s /Applications "$DMG_STAGING/Applications"
+    hdiutil create -volname "Aqua Voice Hook" -srcfolder "$DMG_STAGING" \
+        -ov -format UDZO "$DMG_PATH" >/dev/null 2>&1
+    rm -rf "$DMG_STAGING"
+fi
+# Sign the DMG
+codesign --force --sign "$IDENTITY" --timestamp "$DMG_PATH"
+echo "   ✅ DMG created: $DMG_PATH"
+
 # Generate appcast with EdDSA signing
 echo "🔑 Generating appcast with EdDSA signatures..."
 DOWNLOAD_URL_PREFIX="https://github.com/malpern/aqua-voice-hook/releases/download/v${VERSION}"
@@ -125,6 +155,9 @@ DOWNLOAD_URL_PREFIX="https://github.com/malpern/aqua-voice-hook/releases/downloa
     -o appcast.xml \
     dist/
 echo "   ✅ Appcast generated"
+
+# Fix download URL (generate_appcast omits the version prefix)
+sed -i '' "s|download/${APP_NAME}|download/v${VERSION}/${APP_NAME}|g" appcast.xml 2>/dev/null || true
 
 # Git tag
 echo "🏷️  Tagging v${VERSION}..."
@@ -136,6 +169,7 @@ git tag "v${VERSION}"
 echo "📤 Creating GitHub Release..."
 gh release create "v${VERSION}" \
     "$SPARKLE_ZIP" \
+    "$DMG_PATH" \
     --title "Aqua Voice Hook ${VERSION}" \
     --notes "See release notes."
 
@@ -149,6 +183,6 @@ echo ""
 echo "📦 Artifacts:"
 echo "   • $APP_DIR"
 echo "   • $SPARKLE_ZIP"
-echo "   • $APPCAST_ENTRY"
+echo "   • $DMG_PATH"
 echo ""
 echo "🔗 https://github.com/malpern/aqua-voice-hook/releases/tag/v${VERSION}"
