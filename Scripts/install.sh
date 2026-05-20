@@ -8,6 +8,8 @@ BUNDLE_ID="com.aqua-voice-hook"
 APP_DIR="/Applications/${APP_NAME}.app"
 LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
 LAUNCH_AGENT="$LAUNCH_AGENT_DIR/${BUNDLE_ID}.plist"
+IDENTITY="Developer ID Application: Micah Alpern (X2RKZ5TG99)"
+ENTITLEMENTS="$PROJECT_DIR/Sources/AquaVoiceHook/Entitlements.plist"
 
 echo "=== Building Aqua Voice Hook ==="
 cd "$PROJECT_DIR"
@@ -22,17 +24,37 @@ fi
 echo ""
 echo "=== Assembling app bundle ==="
 rm -rf "$APP_DIR"
-mkdir -p "$APP_DIR/Contents/MacOS"
-mkdir -p "$APP_DIR/Contents/Resources"
+mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources" "$APP_DIR/Contents/Frameworks"
 
 cp "$BINARY" "$APP_DIR/Contents/MacOS/AquaVoiceHook"
+install_name_tool -add_rpath @executable_path/../Frameworks "$APP_DIR/Contents/MacOS/AquaVoiceHook" 2>/dev/null || true
 cp "$PROJECT_DIR/Sources/AquaVoiceHook/Info.plist" "$APP_DIR/Contents/Info.plist"
+cp "$PROJECT_DIR/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
+
+# Copy Sparkle framework
+SPARKLE_FRAMEWORK="$PROJECT_DIR/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+if [[ -d "$SPARKLE_FRAMEWORK" ]]; then
+    cp -R "$SPARKLE_FRAMEWORK" "$APP_DIR/Contents/Frameworks/"
+    echo "  Copied Sparkle.framework"
+fi
 
 echo "  Installed: $APP_DIR"
 
 echo ""
+echo "=== Code signing ==="
+# Sign all Sparkle components (innermost first)
+if [[ -d "$APP_DIR/Contents/Frameworks/Sparkle.framework" ]]; then
+    find "$APP_DIR/Contents/Frameworks/Sparkle.framework" \( -name "*.xpc" -o -name "*.app" -o -name "Autoupdate" \) -print0 | while IFS= read -r -d '' component; do
+        codesign --force --sign "$IDENTITY" --options runtime --timestamp "$component"
+    done
+    codesign --force --sign "$IDENTITY" --options runtime --timestamp \
+        "$APP_DIR/Contents/Frameworks/Sparkle.framework"
+fi
+codesign --force --sign "$IDENTITY" --options runtime --entitlements "$ENTITLEMENTS" --timestamp "$APP_DIR"
+echo "  Signed with Developer ID"
+
+echo ""
 echo "=== Installing LaunchAgent ==="
-# Unload existing if present
 launchctl bootout "gui/$(id -u)/$BUNDLE_ID" 2>/dev/null || true
 
 mkdir -p "$LAUNCH_AGENT_DIR"
@@ -50,7 +72,6 @@ else
     echo "  Config exists: ~/.config/aqua-voice-hook/config.json"
 fi
 
-# Copy example hooks if hooks dir is empty
 if [[ -d "$PROJECT_DIR/hooks" ]] && [[ -z "$(ls -A "$HOME/.config/aqua-voice-hook/hooks" 2>/dev/null)" ]]; then
     cp "$PROJECT_DIR/hooks/"* "$HOME/.config/aqua-voice-hook/hooks/" 2>/dev/null || true
     chmod +x "$HOME/.config/aqua-voice-hook/hooks/"* 2>/dev/null || true
@@ -59,9 +80,9 @@ fi
 
 echo ""
 echo "=== Done ==="
-echo "  App:     $APP_DIR"
-echo "  Config:  ~/.config/aqua-voice-hook/config.json"
-echo "  Hooks:   ~/.config/aqua-voice-hook/hooks/"
+echo "  App:      $APP_DIR"
+echo "  Config:   ~/.config/aqua-voice-hook/config.json"
+echo "  Hooks:    ~/.config/aqua-voice-hook/hooks/"
 echo "  Settings: open aqua-hook://settings"
 echo ""
-echo "  The monitor is now running. Dictate with Aqua Voice to test."
+echo "  The app is now running. Dictate with Aqua Voice to test."

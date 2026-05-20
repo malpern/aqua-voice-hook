@@ -79,8 +79,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if config.autoReturn.enabled,
                config.autoReturn.apps.contains(event.bundleIdentifier) {
                 let delayMs = config.autoReturn.delayMs
+                let playSound = config.autoReturn.playSound
                 DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delayMs)) {
-                    Self.pressReturn()
+                    Self.pressReturn(playSound: playSound)
                 }
             }
         }
@@ -88,8 +89,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.start(pollIntervalMs: configManager.config.pollIntervalMs)
     }
 
-    private static func pressReturn() {
-        NSSound(named: "Purr")?.play()
+    private static func pressReturn(playSound: Bool) {
+        if playSound {
+            NSSound(named: "Purr")?.play()
+        }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         process.arguments = ["-e", "tell application \"System Events\" to keystroke return"]
@@ -164,24 +167,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
-    }
-
-    private static let debugLogFile = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".config/aqua-voice-hook/debug.log")
-
-    static func debugLog(_ message: String) {
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-        let line = "[\(timestamp)] \(message)\n"
-        if let data = line.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: debugLogFile.path) {
-                if let handle = try? FileHandle(forWritingTo: debugLogFile) {
-                    handle.seekToEndOfFile()
-                    handle.write(data)
-                    handle.closeFile()
-                }
-            } else {
-                try? data.write(to: debugLogFile)
-            }
-        }
     }
 }

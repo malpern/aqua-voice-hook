@@ -10,6 +10,7 @@ struct HookConfig: Codable {
 struct AutoReturnConfig: Codable {
     var enabled: Bool
     var delayMs: Int
+    var playSound: Bool
     var apps: [String]
 
     static let defaultApps: [String] = [
@@ -31,8 +32,24 @@ struct AutoReturnConfig: Codable {
     static let `default` = AutoReturnConfig(
         enabled: true,
         delayMs: 50,
+        playSound: true,
         apps: defaultApps
     )
+
+    init(enabled: Bool, delayMs: Int, playSound: Bool, apps: [String]) {
+        self.enabled = enabled
+        self.delayMs = delayMs
+        self.playSound = playSound
+        self.apps = apps
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try container.decode(Bool.self, forKey: .enabled)
+        delayMs = try container.decode(Int.self, forKey: .delayMs)
+        playSound = try container.decodeIfPresent(Bool.self, forKey: .playSound) ?? true
+        apps = try container.decode([String].self, forKey: .apps)
+    }
 }
 
 struct AppConfig: Codable {

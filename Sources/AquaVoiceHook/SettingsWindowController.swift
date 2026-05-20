@@ -16,6 +16,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
     // Auto-Return
     private let autoReturnCheckbox = NSButton(checkboxWithTitle: "Press Return after dictation", target: nil, action: nil)
+    private let soundCheckbox = NSButton(checkboxWithTitle: "Play sound on auto-return", target: nil, action: nil)
     private let delaySlider = NSSlider()
     private let delayLabel = NSTextField(labelWithString: "50 ms")
     private let autoReturnTableView = NSTableView()
@@ -198,6 +199,9 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         autoReturnCheckbox.target = self
         autoReturnCheckbox.action = #selector(toggleAutoReturn)
 
+        soundCheckbox.target = self
+        soundCheckbox.action = #selector(toggleSound)
+
         delaySlider.minValue = 20
         delaySlider.maxValue = 500
         delaySlider.integerValue = 50
@@ -222,6 +226,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
         let settingsGroup = GroupBox(title: "Auto-Return", content: [
             autoReturnCheckbox,
+            soundCheckbox,
             delayRow,
             desc,
         ])
@@ -482,6 +487,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         menuBarCheckbox.state = c.showMenuBarIcon ? .on : .off
         pollField.integerValue = c.pollIntervalMs
         autoReturnCheckbox.state = c.autoReturn.enabled ? .on : .off
+        soundCheckbox.state = c.autoReturn.playSound ? .on : .off
         delaySlider.integerValue = c.autoReturn.delayMs
         delayLabel.stringValue = "\(c.autoReturn.delayMs) ms"
         autoReturnTableView.reloadData()
@@ -538,6 +544,10 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
     @objc private func toggleAutoReturn(_ sender: NSButton) {
         configManager.update { $0.autoReturn.enabled = sender.state == .on }
+    }
+
+    @objc private func toggleSound(_ sender: NSButton) {
+        configManager.update { $0.autoReturn.playSound = sender.state == .on }
     }
 
     @objc private func delayChanged(_ sender: NSSlider) {

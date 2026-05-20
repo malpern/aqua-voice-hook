@@ -10,10 +10,10 @@ ENTITLEMENTS="$PROJECT_DIR/Sources/AquaVoiceHook/Entitlements.plist"
 IDENTITY="Developer ID Application: Micah Alpern (X2RKZ5TG99)"
 NOTARY_PROFILE="KeyPath-Profile"
 
-# Find sign_update
-SIGN_UPDATE="$(ls -1dt /opt/homebrew/Caskroom/sparkle/*/bin/sign_update 2>/dev/null | head -1 || true)"
-if [[ -z "$SIGN_UPDATE" ]]; then
-    echo "❌ sign_update not found. Install Sparkle: brew install --cask sparkle"
+# Find Sparkle tools
+SPARKLE_BIN="$(ls -1dt /opt/homebrew/Caskroom/sparkle/*/bin 2>/dev/null | head -1 || true)"
+if [[ -z "$SPARKLE_BIN" ]] || [[ ! -x "$SPARKLE_BIN/generate_appcast" ]]; then
+    echo "❌ Sparkle tools not found. Install: brew install --cask sparkle"
     exit 1
 fi
 
@@ -73,11 +73,12 @@ APP_DIR="dist/${APP_NAME}.app"
 rm -rf dist
 mkdir -p "dist" "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$BINARY" "$APP_DIR/Contents/MacOS/AquaVoiceHook"
+install_name_tool -add_rpath @executable_path/../Frameworks "$APP_DIR/Contents/MacOS/AquaVoiceHook" 2>/dev/null || true
 cp "$INFO_PLIST" "$APP_DIR/Contents/Info.plist"
 cp "$PROJECT_DIR/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 
 # Copy Sparkle framework into app bundle
-SPARKLE_FRAMEWORK="$(swift build -c release --show-bin-path)/../../../checkouts/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+SPARKLE_FRAMEWORK="$PROJECT_DIR/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 if [[ -d "$SPARKLE_FRAMEWORK" ]]; then
     mkdir -p "$APP_DIR/Contents/Frameworks"
     cp -R "$SPARKLE_FRAMEWORK" "$APP_DIR/Contents/Frameworks/"
@@ -86,16 +87,13 @@ fi
 
 # Sign
 echo "🔏 Code signing..."
-# Sign frameworks first
+# Sign all Sparkle components (innermost first)
 if [[ -d "$APP_DIR/Contents/Frameworks/Sparkle.framework" ]]; then
+    find "$APP_DIR/Contents/Frameworks/Sparkle.framework" \( -name "*.xpc" -o -name "*.app" -o -name "Autoupdate" \) -print0 | while IFS= read -r -d '' component; do
+        codesign --force --sign "$IDENTITY" --options runtime --timestamp "$component"
+    done
     codesign --force --sign "$IDENTITY" --options runtime --timestamp \
-        "$APP_DIR/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc" 2>/dev/null || true
-    codesign --force --sign "$IDENTITY" --options runtime --timestamp \
-        "$APP_DIR/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc" 2>/dev/null || true
-    codesign --force --sign "$IDENTITY" --options runtime --timestamp \
-        "$APP_DIR/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate" 2>/dev/null || true
-    codesign --force --sign "$IDENTITY" --options runtime --timestamp \
-        "$APP_DIR/Contents/Frameworks/Sparkle.framework" 2>/dev/null || true
+        "$APP_DIR/Contents/Frameworks/Sparkle.framework"
 fi
 # Sign the main app
 codesign --force --sign "$IDENTITY" --options runtime --entitlements "$ENTITLEMENTS" --timestamp "$APP_DIR"
@@ -119,49 +117,14 @@ echo "📦 Creating Sparkle archive..."
 SPARKLE_ZIP="dist/AquaVoiceHook-${VERSION}.zip"
 ditto -c -k --keepParent "$APP_DIR" "$SPARKLE_ZIP"
 
-# Sign with EdDSA
-echo "🔑 Signing with EdDSA..."
-EDDSA_OUTPUT=$("$SIGN_UPDATE" "$SPARKLE_ZIP" 2>&1)
-echo "   $EDDSA_OUTPUT"
-
-# Extract signature and length for appcast
-EDDSA_SIG=$(echo "$EDDSA_OUTPUT" | grep -o 'sparkle:edSignature="[^"]*"' | cut -d'"' -f2)
-FILE_SIZE=$(stat -f%z "$SPARKLE_ZIP")
-
-# Generate appcast entry
-APPCAST_ENTRY="dist/AquaVoiceHook-${VERSION}.appcast-entry.xml"
-DOWNLOAD_URL="https://github.com/malpern/aqua-voice-hook/releases/download/v${VERSION}/AquaVoiceHook-${VERSION}.zip"
-PUB_DATE=$(date -R)
-
-cat > "$APPCAST_ENTRY" <<ENTRY
-        <item>
-            <title>Version ${VERSION}</title>
-            <pubDate>${PUB_DATE}</pubDate>
-            <enclosure
-                url="${DOWNLOAD_URL}"
-                sparkle:version="${VERSION}"
-                sparkle:shortVersionString="${VERSION}"
-                sparkle:edSignature="${EDDSA_SIG}"
-                length="${FILE_SIZE}"
-                type="application/octet-stream"
-            />
-        </item>
-ENTRY
-echo "   ✅ Appcast entry generated"
-
-# Update appcast.xml
-echo "📝 Updating appcast.xml..."
-python3 -c "
-appcast = open('appcast.xml').read()
-entry = open('$APPCAST_ENTRY').read()
-marker = '<!-- Releases go here (newest first) -->'
-if marker in appcast:
-    appcast = appcast.replace(marker, marker + '\n\n' + entry.rstrip())
-    open('appcast.xml', 'w').write(appcast)
-    print('   ✅ Appcast updated')
-else:
-    print('   ⚠️  Marker not found — update manually')
-"
+# Generate appcast with EdDSA signing
+echo "🔑 Generating appcast with EdDSA signatures..."
+DOWNLOAD_URL_PREFIX="https://github.com/malpern/aqua-voice-hook/releases/download/v${VERSION}"
+"$SPARKLE_BIN/generate_appcast" \
+    --download-url-prefix "$DOWNLOAD_URL_PREFIX" \
+    -o appcast.xml \
+    dist/
+echo "   ✅ Appcast generated"
 
 # Git tag
 echo "🏷️  Tagging v${VERSION}..."
