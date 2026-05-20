@@ -153,18 +153,11 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
             menuBarTip,
         ])
 
-        let configPath = monoLabel(abbreviatePath(AppConfig.configFile.path))
-
-        let openConfigButton = NSButton(title: "Open Config in Finder", target: self, action: #selector(revealConfig))
-        openConfigButton.controlSize = .small
-        let openHooksButton = NSButton(title: "Open Hooks Folder", target: self, action: #selector(openHooksDir))
-        openHooksButton.controlSize = .small
-        let buttonRow = NSStackView(views: [openConfigButton, openHooksButton])
-        buttonRow.spacing = 8
-
+        let editConfigButton = NSButton(title: "Edit Config File…", target: self, action: #selector(editConfig))
+        editConfigButton.controlSize = .regular
         let configTip = secondaryLabel("All settings are stored in a JSON file that scripts and agents can edit directly.")
 
-        let configGroup = GroupBox(title: "Advanced", content: [configPath, buttonRow, configTip])
+        let configGroup = GroupBox(title: "Advanced", content: [editConfigButton, configTip])
 
         return tabContainer([monitoringGroup, appearanceGroup, configGroup])
     }
@@ -495,12 +488,13 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
-    @objc private func revealConfig() {
-        NSWorkspace.shared.selectFile(AppConfig.configFile.path, inFileViewerRootedAtPath: AppConfig.configDir.path)
-    }
-
-    @objc private func openHooksDir() {
-        NSWorkspace.shared.open(AppConfig.hooksDir)
+    @objc private func editConfig() {
+        let configURL = AppConfig.configFile
+        if let zedURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "dev.zed.Zed") {
+            NSWorkspace.shared.open([configURL], withApplicationAt: zedURL, configuration: NSWorkspace.OpenConfiguration())
+        } else {
+            NSWorkspace.shared.open(configURL)
+        }
     }
 
     // MARK: - Auto-Return Actions
