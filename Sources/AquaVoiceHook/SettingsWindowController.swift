@@ -621,26 +621,32 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         alert.addButton(withTitle: "Cancel")
 
         let grid = NSGridView(numberOfColumns: 2, rows: 0)
+        grid.translatesAutoresizingMaskIntoConstraints = false
         grid.column(at: 0).xPlacement = .trailing
         grid.rowSpacing = 8
 
-        let nameField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 22))
+        let nameField = NSTextField()
         nameField.placeholderString = "My Hook"
         nameField.stringValue = existing?.name ?? ""
+        nameField.translatesAutoresizingMaskIntoConstraints = false
+        nameField.widthAnchor.constraint(equalToConstant: 280).isActive = true
         grid.addRow(with: [NSTextField(labelWithString: "Name:"), nameField])
 
-        let commandField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 22))
+        let commandField = NSTextField()
         commandField.placeholderString = "~/.config/aqua-voice-hook/hooks/my-hook.sh"
         commandField.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         commandField.stringValue = existing?.command ?? ""
+        commandField.translatesAutoresizingMaskIntoConstraints = false
+        commandField.widthAnchor.constraint(equalToConstant: 280).isActive = true
         grid.addRow(with: [NSTextField(labelWithString: "Command:"), commandField])
 
-        let filterField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 22))
+        let filterField = NSTextField()
         filterField.placeholderString = "e.g. Zed, com.apple.mail (optional)"
         filterField.stringValue = existing?.appFilter ?? ""
+        filterField.translatesAutoresizingMaskIntoConstraints = false
+        filterField.widthAnchor.constraint(equalToConstant: 280).isActive = true
         grid.addRow(with: [NSTextField(labelWithString: "App filter:"), filterField])
 
-        grid.setFrameSize(grid.fittingSize)
         alert.accessoryView = grid
 
         guard let window else { return }
