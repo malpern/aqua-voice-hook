@@ -1,14 +1,25 @@
 import AppKit
 import CoreGraphics
 import ApplicationServices
+import Sparkle
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let configManager = ConfigManager()
     let monitor = PasteboardMonitor()
     let hookRunner = HookRunner()
+    let updaterController: SPUStandardUpdaterController
 
     private var statusItem: NSStatusItem?
     private var settingsWindow: SettingsWindowController?
+
+    override init() {
+        updaterController = SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         startMonitoring()
@@ -126,6 +137,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+        updateItem.target = self
+        menu.addItem(updateItem)
+
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
@@ -141,6 +156,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         settingsWindow?.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func checkForUpdates() {
+        updaterController.checkForUpdates(nil)
     }
 
     @objc private func quit() {

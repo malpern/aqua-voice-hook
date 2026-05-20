@@ -22,6 +22,14 @@
     <string>14.0</string>
     <key>LSUIElement</key>
     <true/>
+    <key>SUFeedURL</key>
+    <string>https://raw.githubusercontent.com/malpern/aqua-voice-hook/master/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>Jry+V9z0EbEysm5FWpbL8J3XfeFnzWqGI3Y3+CQiHgo=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>
