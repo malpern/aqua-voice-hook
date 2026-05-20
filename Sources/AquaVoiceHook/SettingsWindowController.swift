@@ -9,16 +9,13 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     private var currentTab = "general"
 
     // General
-    private let enabledCheckbox = NSButton(checkboxWithTitle: "Monitor when transcription is done", target: nil, action: nil)
-    private let clipboardHistoryCheckbox = NSButton(checkboxWithTitle: "Save transcriptions to clipboard history", target: nil, action: nil)
+    private let enabledCheckbox = NSButton(checkboxWithTitle: "Detect Aqua Voice dictations", target: nil, action: nil)
+    private let clipboardHistoryCheckbox = NSButton(checkboxWithTitle: "Add dictations to clipboard history", target: nil, action: nil)
     private let menuBarCheckbox = NSButton(checkboxWithTitle: "Show menu bar icon", target: nil, action: nil)
-    private let pollField = NSTextField()
 
     // Auto-Return
     private let autoReturnCheckbox = NSButton(checkboxWithTitle: "Press Return after dictation", target: nil, action: nil)
-    private let soundCheckbox = NSButton(checkboxWithTitle: "Play sound on auto-return", target: nil, action: nil)
-    private let delaySlider = NSSlider()
-    private let delayLabel = NSTextField(labelWithString: "50 ms")
+    private let soundCheckbox = NSButton(checkboxWithTitle: "Play confirmation sound", target: nil, action: nil)
     private let autoReturnTableView = NSTableView()
 
     // Hooks
@@ -139,56 +136,35 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
         clipboardHistoryCheckbox.target = self
         clipboardHistoryCheckbox.action = #selector(toggleClipboardHistory)
+        let clipboardTip = secondaryLabel("Makes dictations visible in Raycast and other clipboard managers.")
 
-        pollField.placeholderString = "100"
-        pollField.integerValue = 100
-        pollField.translatesAutoresizingMaskIntoConstraints = false
-        pollField.widthAnchor.constraint(equalToConstant: 60).isActive = true
-        pollField.target = self
-        pollField.action = #selector(pollIntervalChanged)
-
-        let pollRow = NSStackView(views: [
-            NSTextField(labelWithString: "Poll interval"),
-            pollField,
-            secondaryLabel("ms"),
-        ])
-        pollRow.spacing = 6
-
-        let monitoringGroup = GroupBox(title: "Monitoring", content: [
+        let monitoringGroup = GroupBox(title: "Dictation", content: [
             enabledCheckbox,
             clipboardHistoryCheckbox,
-            pollRow,
+            clipboardTip,
         ])
 
         menuBarCheckbox.target = self
         menuBarCheckbox.action = #selector(toggleMenuBar)
-
-        let tip = secondaryLabel("When hidden, open settings via:  open aqua-hook://settings")
-        tip.font = .systemFont(ofSize: 11)
+        let menuBarTip = secondaryLabel("You can always open settings by double-clicking the app or running:  open aqua-hook://settings")
 
         let appearanceGroup = GroupBox(title: "Appearance", content: [
             menuBarCheckbox,
-            tip,
+            menuBarTip,
         ])
 
         let configPath = monoLabel(abbreviatePath(AppConfig.configFile.path))
-        let hooksPath = monoLabel(abbreviatePath(AppConfig.hooksDir.path))
 
-        let pathGrid = NSGridView(numberOfColumns: 2, rows: 0)
-        pathGrid.column(at: 0).xPlacement = .trailing
-        pathGrid.rowSpacing = 6
-        pathGrid.columnSpacing = 8
-        pathGrid.addRow(with: [secondaryLabel("Config file"), configPath])
-        pathGrid.addRow(with: [secondaryLabel("Hooks folder"), hooksPath])
-
-        let revealButton = NSButton(title: "Reveal in Finder", target: self, action: #selector(revealConfig))
-        revealButton.controlSize = .small
+        let openConfigButton = NSButton(title: "Open Config in Finder", target: self, action: #selector(revealConfig))
+        openConfigButton.controlSize = .small
         let openHooksButton = NSButton(title: "Open Hooks Folder", target: self, action: #selector(openHooksDir))
         openHooksButton.controlSize = .small
-        let buttonRow = NSStackView(views: [revealButton, openHooksButton])
+        let buttonRow = NSStackView(views: [openConfigButton, openHooksButton])
         buttonRow.spacing = 8
 
-        let configGroup = GroupBox(title: "Configuration", content: [pathGrid, buttonRow])
+        let configTip = secondaryLabel("All settings are stored in a JSON file that scripts and agents can edit directly.")
+
+        let configGroup = GroupBox(title: "Advanced", content: [configPath, buttonRow, configTip])
 
         return tabContainer([monitoringGroup, appearanceGroup, configGroup])
     }
@@ -202,32 +178,11 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         soundCheckbox.target = self
         soundCheckbox.action = #selector(toggleSound)
 
-        delaySlider.minValue = 20
-        delaySlider.maxValue = 500
-        delaySlider.integerValue = 50
-        delaySlider.target = self
-        delaySlider.action = #selector(delayChanged)
-        delaySlider.translatesAutoresizingMaskIntoConstraints = false
-        delaySlider.widthAnchor.constraint(equalToConstant: 180).isActive = true
-
-        delayLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-        delayLabel.textColor = .secondaryLabelColor
-        delayLabel.translatesAutoresizingMaskIntoConstraints = false
-        delayLabel.widthAnchor.constraint(equalToConstant: 50).isActive = true
-
-        let delayRow = NSStackView(views: [
-            NSTextField(labelWithString: "Delay"),
-            delaySlider,
-            delayLabel,
-        ])
-        delayRow.spacing = 8
-
-        let desc = secondaryLabel("After Aqua Voice pastes into these apps, Return is pressed automatically.")
+        let desc = secondaryLabel("When you dictate into one of these apps, Return is pressed automatically so your text is submitted.")
 
         let settingsGroup = GroupBox(title: "Auto-Return", content: [
             autoReturnCheckbox,
             soundCheckbox,
-            delayRow,
             desc,
         ])
 
@@ -380,12 +335,21 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         lastDictationText.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         lastDictationText.textColor = .secondaryLabelColor
         lastDictationText.maximumNumberOfLines = 3
-        lastDictationText.preferredMaxLayoutWidth = 460
+        lastDictationText.preferredMaxLayoutWidth = 420
+
+        let copyButton = NSButton(image: NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy")!, target: self, action: #selector(copyLastDictation))
+        copyButton.bezelStyle = .accessoryBarAction
+        copyButton.isBordered = false
+        copyButton.toolTip = "Copy to clipboard"
+
+        let textRow = NSStackView(views: [lastDictationText, copyButton])
+        textRow.alignment = .top
+        textRow.spacing = 4
 
         let lastGroup = GroupBox(title: "Last Dictation", content: [
             formRow("App", lastAppText),
             formRow("Time", lastTimeText),
-            lastDictationText,
+            textRow,
         ])
 
         return tabContainer([monitorGroup, lastGroup])
@@ -485,11 +449,8 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         enabledCheckbox.state = c.enabled ? .on : .off
         clipboardHistoryCheckbox.state = c.clipboardHistory ? .on : .off
         menuBarCheckbox.state = c.showMenuBarIcon ? .on : .off
-        pollField.integerValue = c.pollIntervalMs
         autoReturnCheckbox.state = c.autoReturn.enabled ? .on : .off
         soundCheckbox.state = c.autoReturn.playSound ? .on : .off
-        delaySlider.integerValue = c.autoReturn.delayMs
-        delayLabel.stringValue = "\(c.autoReturn.delayMs) ms"
         autoReturnTableView.reloadData()
         hooksTableView.reloadData()
         loadStatusValues()
@@ -528,8 +489,10 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         configManager.update { $0.showMenuBarIcon = sender.state == .on }
     }
 
-    @objc private func pollIntervalChanged(_ sender: NSTextField) {
-        configManager.update { $0.pollIntervalMs = max(50, sender.integerValue) }
+    @objc private func copyLastDictation() {
+        guard let text = monitor.lastDictation?.text else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     @objc private func revealConfig() {
@@ -548,12 +511,6 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
     @objc private func toggleSound(_ sender: NSButton) {
         configManager.update { $0.autoReturn.playSound = sender.state == .on }
-    }
-
-    @objc private func delayChanged(_ sender: NSSlider) {
-        let val = sender.integerValue
-        delayLabel.stringValue = "\(val) ms"
-        configManager.update { $0.autoReturn.delayMs = val }
     }
 
     @objc private func showAutoReturnAddMenu(_ sender: Any?) {

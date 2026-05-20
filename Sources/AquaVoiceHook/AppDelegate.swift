@@ -123,19 +123,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildMenu() {
         let menu = NSMenu()
 
-        let statusTitle = monitor.isRunning ? "Monitoring" : "Stopped"
-        let statusItem = NSMenuItem(title: statusTitle, action: nil, keyEquivalent: "")
-        let dot = monitor.isRunning ? "🟢" : "🔴"
-        statusItem.title = "\(dot) \(statusTitle)"
-        menu.addItem(statusItem)
-
-        let countItem = NSMenuItem(
-            title: "\(monitor.detectionCount) dictations detected", action: nil, keyEquivalent: ""
-        )
-        menu.addItem(countItem)
-
-        menu.addItem(.separator())
-
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
@@ -143,6 +130,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
         updateItem.target = self
         menu.addItem(updateItem)
+
+        menu.addItem(.separator())
+
+        let dot = monitor.isRunning ? "🟢" : "🔴"
+        let statusTitle = "\(dot) \(monitor.isRunning ? "Monitoring" : "Stopped") · \(monitor.detectionCount) dictations"
+        let statusItem = NSMenuItem(title: statusTitle, action: nil, keyEquivalent: "")
+        statusItem.isEnabled = false
+        menu.addItem(statusItem)
 
         menu.addItem(.separator())
 
