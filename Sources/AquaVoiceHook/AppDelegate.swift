@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import ApplicationServices
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let configManager = ConfigManager()
@@ -12,10 +13,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         startMonitoring()
         updateStatusItem()
+        checkAccessibility()
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(configDidChange), name: ConfigManager.didChange, object: nil
         )
+    }
+
+    private func checkAccessibility() {
+        guard configManager.config.autoReturn.enabled else { return }
+        if AXIsProcessTrusted() { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Accessibility Permission Required"
+        alert.informativeText = "Auto-Return needs Accessibility permission to press the Return key after dictation. Without it, Auto-Return won't work.\n\nClick \"Open Settings\" to grant permission, then restart Aqua Voice Hook."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Open Settings")
+        alert.addButton(withTitle: "Later")
+
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+            NSWorkspace.shared.open(url)
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -58,10 +78,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private static func pressReturn() {
-        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: true)
-        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: false)
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
+        NSSound(named: "Purr")?.play()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", "tell application \"System Events\" to keystroke return"]
+        try? process.run()
     }
 
     @objc private func configDidChange() {
@@ -124,5 +145,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    private static let debugLogFile = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".config/aqua-voice-hook/debug.log")
+
+    static func debugLog(_ message: String) {
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let line = "[\(timestamp)] \(message)\n"
+        if let data = line.data(using: .utf8) {
+            if FileManager.default.fileExists(atPath: debugLogFile.path) {
+                if let handle = try? FileHandle(forWritingTo: debugLogFile) {
+                    handle.seekToEndOfFile()
+                    handle.write(data)
+                    handle.closeFile()
+                }
+            } else {
+                try? data.write(to: debugLogFile)
+            }
+        }
     }
 }

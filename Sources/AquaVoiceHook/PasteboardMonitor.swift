@@ -16,10 +16,12 @@ final class PasteboardMonitor {
     private(set) var detectionCount = 0
 
     var onDictation: ((DictationEvent) -> Void)?
+    var onCycleComplete: ((DictationEvent) -> Void)?
     var clipboardHistoryEnabled = true
 
     private var timer: DispatchSourceTimer?
     private var pendingTranscription: String?
+    private var pendingEvent: DictationEvent?
     private var pendingTimestamp = Date.distantPast
     private var isInjecting = false
 
@@ -59,10 +61,11 @@ final class PasteboardMonitor {
                     timestamp: Date()
                 )
 
+                self.pendingEvent = event
                 if self.clipboardHistoryEnabled {
                     self.pendingTranscription = text
-                    self.pendingTimestamp = Date()
                 }
+                self.pendingTimestamp = Date()
 
                 DispatchQueue.main.async {
                     self.lastDictation = event
@@ -74,30 +77,37 @@ final class PasteboardMonitor {
             }
 
             // +1 jump shortly after a dictation = Aqua Voice restoring clipboard
-            // Inject the transcription into clipboard history then restore
-            if jump == 1, aquaRunning, self.pendingTranscription != nil, timeSincePending < 2.0 {
-                let transcription = self.pendingTranscription!
+            if jump == 1, aquaRunning, self.pendingEvent != nil, timeSincePending < 2.0 {
+                let event = self.pendingEvent!
+                let transcription = self.pendingTranscription
+                self.pendingEvent = nil
                 self.pendingTranscription = nil
 
-                let restoredContent = pasteboard.string(forType: .string)
+                // Fire cycle-complete callback (used for auto-return)
+                DispatchQueue.main.async {
+                    self.onCycleComplete?(event)
+                }
 
-                self.isInjecting = true
+                // Inject transcription into clipboard history if enabled
+                if let transcription {
+                    let restoredContent = pasteboard.string(forType: .string)
 
-                // Write transcription as a clean pasteboard item — no hide markers
-                pasteboard.clearContents()
-                let item = NSPasteboardItem()
-                item.setString(transcription, forType: .string)
-                item.setString("com.aqua-voice-hook.app", forType: NSPasteboard.PasteboardType("org.nspasteboard.source"))
-                pasteboard.writeObjects([item])
+                    self.isInjecting = true
 
-                // Wait 750ms for clipboard managers to capture, then restore original
-                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(750)) {
-                    if let original = restoredContent {
-                        pasteboard.clearContents()
-                        pasteboard.setString(original, forType: .string)
+                    pasteboard.clearContents()
+                    let item = NSPasteboardItem()
+                    item.setString(transcription, forType: .string)
+                    item.setString("com.aqua-voice-hook.app", forType: NSPasteboard.PasteboardType("org.nspasteboard.source"))
+                    pasteboard.writeObjects([item])
+
+                    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(750)) {
+                        if let original = restoredContent {
+                            pasteboard.clearContents()
+                            pasteboard.setString(original, forType: .string)
+                        }
+                        lastChangeCount = pasteboard.changeCount
+                        self.isInjecting = false
                     }
-                    lastChangeCount = pasteboard.changeCount
-                    self.isInjecting = false
                 }
                 return
             }
