@@ -1,12 +1,19 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0">
     <channel>
         <title>Aqua Voice Hook</title>
         <link>https://github.com/malpern/aqua-voice-hook</link>
         <description>Aqua Voice Hook update feed</description>
         <language>en</language>
-
         <!-- Releases go here (newest first) -->
-
+        <item>
+            <title>0.1.0</title>
+            <pubDate>Wed, 20 May 2026 14:20:02 -0700</pubDate>
+            <sparkle:version>0.1.0</sparkle:version>
+            <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/malpern/aqua-voice-hook/releases/download/v0.1.0/AquaVoiceHook-0.1.0.zip" length="2996433" type="application/octet-stream" sparkle:edSignature="+GVcOczhTxyvucrbJwJVknLFZ1sGkm+BTyuLptn2PSImhcWpFWP0r1YiWG2Ye/nJcrs8ZYg8V7B5+HTeHSh7AQ=="/>
+        </item>
     </channel>
 </rss>
