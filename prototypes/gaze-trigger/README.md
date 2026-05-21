@@ -6,29 +6,37 @@ after sustained gaze. Proof of concept for hands-free dictation activation.
 ## Setup
 
 ```bash
-# Install uv if needed
-brew install uv
+# Plug in the OAK-D Lite via USB-C, then:
+uv run main.py --preview
 
-# Run (uv handles the venv and deps automatically)
-uv run main.py
-
-# With camera preview window (useful for tuning thresholds)
-uv run --extra preview main.py --preview
-
-# Custom thresholds
-uv run main.py --threshold 20 --dwell 0.5 --cooldown 3
+# Custom dwell time (default 1s)
+uv run main.py --dwell 0.5 --preview
 ```
+
+If the device crashed on a previous run, unplug and replug the USB-C cable.
+
+## How it works
+
+1. OAK-D Lite streams 640x480 BGR frames at 20fps via DepthAI
+2. OpenCV Haar cascade detects frontal faces on each frame (host-side)
+3. A sustained face detection for `--dwell` seconds triggers an event
+4. After triggering, gaze is ignored for `--cooldown` seconds
+
+The Haar cascade only detects frontal faces, so turning your head away
+naturally stops detection. At desk distance with a fixed camera, this is
+a reliable proxy for "looking at the camera."
 
 ## Output
 
 JSON lines on stdout:
 
 ```jsonl
-{"event": "starting", "threshold": 15.0, "dwell_time": 1.0}
-{"event": "running", "camera": "OAK-D-LITE"}
-{"event": "looking", "yaw": 2.3, "pitch": -1.1, "roll": 0.5}
-{"event": "dwell_progress", "progress": 0.5, "yaw": 2.1, "pitch": -0.8}
-{"event": "trigger", "yaw": 1.9, "pitch": -1.0, "dwell_frames": 20}
+{"event": "starting", "dwell_time": 1.0}
+{"event": "device_found", "camera": "OAK-D-LITE"}
+{"event": "running"}
+{"event": "looking", "face_x": 210, "face_y": 140, "face_w": 180, "face_h": 180}
+{"event": "dwell_progress", "progress": 0.5}
+{"event": "trigger", "dwell_frames": 20}
 {"event": "armed"}
 {"event": "look_away", "was_at_frame": 8}
 {"event": "stopped"}
@@ -38,16 +46,12 @@ JSON lines on stdout:
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--threshold` | 15.0 | Max yaw/pitch degrees to count as "looking" |
-| `--dwell` | 1.0 | Seconds of sustained gaze before trigger fires |
+| `--dwell` | 1.0 | Seconds of sustained face detection before trigger fires |
 | `--cooldown` | 2.0 | Seconds after trigger before re-arming |
-| `--preview` | off | Show OpenCV camera window with overlay |
+| `--preview` | off | Show camera window with face rectangle and progress bar |
 
-## How it works
+## Future improvements
 
-Two neural networks run on the OAK-D Lite's Myriad X chip:
-1. **YuNet** face detection (640x480)
-2. **Head pose estimation** (60x60 crop of detected face) → yaw, pitch, roll
-
-If both yaw and pitch are within `--threshold` degrees for `--dwell` seconds,
-a trigger event fires. After triggering, gaze is ignored for `--cooldown` seconds.
+- Add head pose estimation (MediaPipe or on-device) for more precise gaze detection
+- Move face detection on-device (Myriad X) to free host CPU
+- Add depth filtering to ignore faces beyond desk distance
