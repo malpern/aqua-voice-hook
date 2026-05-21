@@ -3,10 +3,10 @@
 Gaze trigger proof-of-concept for OAK-D Lite.
 
 Detects when the user is looking at the camera using a two-stage pipeline:
-  1. YuNet face detection
-  2. Head pose estimation (yaw/pitch/roll)
+  1. YuNet face detection (on-device)
+  2. Head pose estimation (on-device, per detected face)
 
-When the user sustains gaze for DWELL_FRAMES consecutive frames, prints TRIGGER.
+When the user sustains gaze for --dwell seconds, emits a trigger event.
 Outputs JSON lines to stdout for future integration with the Swift app.
 
 Usage:
@@ -19,31 +19,14 @@ import json
 import time
 
 import depthai as dai
-from depthai_nodes.node import ParsingNeuralNetwork, FrameCropper, GatherData
+import numpy as np
+from depthai_nodes.node import ParsingNeuralNetwork, FrameCropper
 
 
 LOOKING_THRESHOLD_DEFAULT = 15.0  # degrees
 DWELL_TIME_DEFAULT = 1.0  # seconds
 COOLDOWN_DEFAULT = 2.0  # seconds after trigger before re-arming
 CAMERA_FPS = 20
-
-
-def extract_head_pose(pose_data):
-    """Extract yaw, pitch, roll from head pose prediction.
-
-    The head-pose-estimation model may output structured predictions
-    or raw tensors depending on the depthai-nodes parser version.
-    """
-    if hasattr(pose_data, "yaw"):
-        return pose_data.yaw, pose_data.pitch, pose_data.roll
-
-    if hasattr(pose_data, "getTensor"):
-        yaw = float(pose_data.getTensor("angle_y_fc").flatten()[0])
-        pitch = float(pose_data.getTensor("angle_p_fc").flatten()[0])
-        roll = float(pose_data.getTensor("angle_r_fc").flatten()[0])
-        return yaw, pitch, roll
-
-    raise ValueError(f"Cannot extract head pose from {type(pose_data)}")
 
 
 def run(threshold: float, dwell_time: float, cooldown: float, preview: bool):
@@ -75,17 +58,19 @@ def run(threshold: float, dwell_time: float, cooldown: float, preview: bool):
             .build(inputImage=cam_out)
         )
 
-        pose_nn = pipeline.create(ParsingNeuralNetwork).build(
-            input=cropper.out, nnSource="luxonis/head-pose-estimation:60x60",
-        )
+        # Use raw NeuralNetwork for head pose — the model has 3 output heads
+        # (angle_y_fc, angle_p_fc, angle_r_fc) and ParsingNeuralNetwork.out
+        # requires exactly 1 head. NeuralNetwork bundles all into one NNData.
+        pose_desc = dai.NNModelDescription("luxonis/head-pose-estimation:60x60")
+        pose_desc.platform = device.getPlatformAsString()
+        pose_archive = dai.NNArchive(dai.getModelFromZoo(pose_desc))
 
-        # --- Gather per-crop pose results back into per-frame groups ---
-        gather = pipeline.create(GatherData).build(
-            inputData=pose_nn.out,
-            inputReference=face_nn.out,
-            cameraFps=CAMERA_FPS,
-        )
-        gather_q = gather.out.createOutputQueue(maxSize=4, blocking=False)
+        pose_nn = pipeline.create(dai.node.NeuralNetwork)
+        pose_nn.setNNArchive(pose_archive)
+        cropper.out.link(pose_nn.input)
+
+        pose_q = pose_nn.out.createOutputQueue(maxSize=4, blocking=False)
+        det_q = face_nn.out.createOutputQueue(maxSize=4, blocking=False)
 
         preview_q = None
         if preview:
@@ -98,6 +83,7 @@ def run(threshold: float, dwell_time: float, cooldown: float, preview: bool):
         dwell_frames = int(dwell_time * CAMERA_FPS)
         state = "idle"  # idle | dwelling | cooldown
         last_trigger_time = 0.0
+        yaw = pitch = roll = 0.0
 
         if preview:
             import cv2
@@ -106,10 +92,25 @@ def run(threshold: float, dwell_time: float, cooldown: float, preview: bool):
             while pipeline.isRunning():
                 pipeline.processTasks()
 
-                gather_msg = gather_q.tryGet()
-                if gather_msg is None:
-                    time.sleep(0.005)
-                    continue
+                # Check for new detections (tells us if any face is visible)
+                det_msg = det_q.tryGet()
+                has_face = False
+                if det_msg is not None:
+                    dets = det_msg.detections if hasattr(det_msg, "detections") else []
+                    has_face = len(dets) > 0
+
+                # Check for pose results (one per cropped face)
+                pose_msg = pose_q.tryGet()
+                looking = False
+
+                if pose_msg is not None:
+                    try:
+                        yaw = float(np.array(pose_msg.getTensor("angle_y_fc")).flatten()[0])
+                        pitch = float(np.array(pose_msg.getTensor("angle_p_fc")).flatten()[0])
+                        roll = float(np.array(pose_msg.getTensor("angle_r_fc")).flatten()[0])
+                        looking = abs(yaw) < threshold and abs(pitch) < threshold
+                    except Exception:
+                        pass
 
                 now = time.time()
 
@@ -120,25 +121,8 @@ def run(threshold: float, dwell_time: float, cooldown: float, preview: bool):
                         consecutive = 0
                         print(json.dumps({"event": "armed"}), flush=True)
                     else:
-                        _drain_preview(preview, preview_q, 0, 0, state, False, 0, dwell_frames)
+                        _drain_preview(preview, preview_q, yaw, pitch, state, False, 0, dwell_frames)
                         continue
-
-                looking = False
-                yaw = pitch = roll = 0.0
-
-                # GatherData output: .first = reference (detections), .second = list of per-crop results
-                detections = gather_msg.first
-                pose_results = gather_msg.second
-
-                if pose_results:
-                    for pose_data in (pose_results if isinstance(pose_results, list) else [pose_results]):
-                        try:
-                            yaw, pitch, roll = extract_head_pose(pose_data)
-                            if abs(yaw) < threshold and abs(pitch) < threshold:
-                                looking = True
-                                break
-                        except (ValueError, IndexError, AttributeError):
-                            continue
 
                 if looking:
                     consecutive += 1
@@ -170,14 +154,18 @@ def run(threshold: float, dwell_time: float, cooldown: float, preview: bool):
                             "pitch": round(pitch, 1),
                         }), flush=True)
                 else:
-                    if state == "dwelling" and consecutive > 0:
-                        print(json.dumps({"event": "look_away", "was_at_frame": consecutive}),
-                              flush=True)
-                    consecutive = 0
-                    if state != "cooldown":
-                        state = "idle"
+                    if pose_msg is not None or (det_msg is not None and not has_face):
+                        if state == "dwelling" and consecutive > 0:
+                            print(json.dumps({"event": "look_away", "was_at_frame": consecutive}),
+                                  flush=True)
+                        consecutive = 0
+                        if state != "cooldown":
+                            state = "idle"
 
                 _drain_preview(preview, preview_q, yaw, pitch, state, looking, consecutive, dwell_frames)
+
+                if pose_msg is None and det_msg is None:
+                    time.sleep(0.005)
 
         except KeyboardInterrupt:
             pass
