@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let configManager = ConfigManager()
     let monitor = PasteboardMonitor()
     let hookRunner = HookRunner()
+    let gazeTrigger = GazeTriggerManager()
     let updaterController: SPUStandardUpdaterController
 
     private var statusItem: NSStatusItem?
@@ -25,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startMonitoring()
         updateStatusItem()
         checkAccessibility()
+        gazeTrigger.start()
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(configDidChange), name: ConfigManager.didChange, object: nil
@@ -161,6 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func quit() {
+        gazeTrigger.stop()
         NSApp.terminate(nil)
     }
 }
