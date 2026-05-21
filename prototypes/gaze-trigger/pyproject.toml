@@ -1,0 +1,16 @@
+[project]
+name = "gaze-trigger"
+version = "0.1.0"
+description = "OAK-D Lite gaze-triggered dictation proof of concept"
+requires-python = ">=3.10"
+dependencies = [
+    "depthai>=3.0",
+    "depthai-nodes>=0.5",
+    "numpy",
+]
+
+[project.optional-dependencies]
+preview = ["opencv-python>=4.8"]
+
+[project.scripts]
+gaze-trigger = "main:main"
